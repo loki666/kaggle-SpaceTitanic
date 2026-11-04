@@ -67,7 +67,7 @@ models' probabilities are averaged and thresholded at 0.5.
 |---------|----------------------------------|--------|--------|----------|--------|--------|-----------|
 | v1      | base                             | 0.8109 | 0.8121 | 0.8148   | 0.7971 | 0.8113 | 0.80266   |
 | v3      | + spatial + behaviour            | 0.8171 | 0.8176 | 0.8179   | 0.8061 | 0.8193 | 0.80547   |
-| v4      | v3, averaged over 3 CV seeds     | 0.8193 | 0.8159 | 0.8199   | 0.8058 | 0.8190 | see below |
+| v4      | v3, averaged over 3 CV seeds     | 0.8193 | 0.8159 | 0.8199   | 0.8058 | 0.8190 | 0.80523   |
 
 Notes from the experiments (`--seeds 5`, LightGBM proxy):
 
