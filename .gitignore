@@ -1,0 +1,19 @@
+# Competition data (download with scripts/download_data.sh)
+data/*
+!data/.gitkeep
+
+# Model outputs
+submissions/*
+!submissions/.gitkeep
+*.pkl
+*.joblib
+catboost_info/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
