@@ -19,6 +19,8 @@ and `sample_submission.csv` there.
 ```bash
 python -m spaceship.train                       # all four models, 5-fold CV
 python -m spaceship.train --models lgbm catboost --folds 10 --seed 7
+python -m spaceship.train --seeds 3                        # average 3 CV seeds
+python -m spaceship.train --stack --pseudo-threshold 0.9   # see below
 ```
 
 Prints the out-of-fold accuracy per model and for the blend, writes
@@ -59,6 +61,16 @@ categoricals) and a one-hot logistic regression. Each is trained with
 stratified K-fold; test predictions are averaged over folds, then the
 models' probabilities are averaged and thresholded at 0.5.
 
+Two optional extras, both evaluated so that the reported CV stays honest:
+
+- `--pseudo-threshold T`: test rows the blend is confident about (prob
+  above T or below 1-T) are added to training with their predicted label
+  and every model is retrained. Done per fold, with the pseudo-labels
+  coming from models that never saw that fold's validation rows.
+- `--stack`: a logistic-regression meta-model over the models' out-of-fold
+  logits replaces the plain average; its CV accuracy comes from a second
+  10-fold cross-validation over the out-of-fold matrix.
+
 ## Results
 
 5-fold stratified CV accuracy (out-of-fold, seed 42) and Kaggle public score.
@@ -68,6 +80,7 @@ models' probabilities are averaged and thresholded at 0.5.
 | v1      | base                             | 0.8109 | 0.8121 | 0.8148   | 0.7971 | 0.8113 | 0.80266   |
 | v3      | + spatial + behaviour            | 0.8171 | 0.8176 | 0.8179   | 0.8061 | 0.8193 | 0.80547   |
 | v4      | v3, averaged over 3 CV seeds     | 0.8193 | 0.8159 | 0.8199   | 0.8058 | 0.8190 | 0.80523   |
+| v5      | v3 + pseudo-label 0.9 + stack    | 0.8184 | 0.8162 | 0.8158   | 0.8047 | 0.8195 | 0.80570   |
 
 Notes from the experiments (`--seeds 5`, LightGBM proxy):
 
@@ -76,6 +89,16 @@ Notes from the experiments (`--seeds 5`, LightGBM proxy):
   coarse (deck / side / band) rather than cabin-by-cabin.
 - Hyperparameters move CV within about +/-0.003; CatBoost depth 8 was best.
 - Blending beats the best single model by a hair; threshold 0.5 is optimal.
+- Stacking (0.8187) does not beat the plain average (0.8193). Pseudo-labelling
+  at thresholds 0.8 / 0.9 / 0.95 gives blends of 0.8186 / 0.8190 / 0.8190;
+  with the stacker on top the best is 0.8195, two passengers better than the
+  average and inside seed noise.
+- An MLP (scikit-learn stand-in for a Keras net) scores 0.803-0.804 alone and
+  adds at most 0.0006 to the blend.
+
+The data is synthetic with deliberate noise; honest models plateau around
+0.82-0.83 on the public leaderboard. Higher public scores come from
+leaderboard probing or shared test labels.
 
 ## Tests
 
