@@ -37,7 +37,7 @@ def cv_predict(name: str, X: pd.DataFrame, y: np.ndarray, X_test: pd.DataFrame, 
     return oof, test_pred
 
 
-def run(data_dir: Path, out: Path, models: list[str], folds: int, seed: int, report: Path | None) -> dict:
+def run(data_dir: Path, out: Path, models: list[str], folds: int, seed: int, report: Path | None, seeds: int = 1) -> dict:
     train = pd.read_csv(data_dir / "train.csv")
     test = pd.read_csv(data_dir / "test.csv")
     feat_train, feat_test = build_features(train, test)
@@ -49,7 +49,12 @@ def run(data_dir: Path, out: Path, models: list[str], folds: int, seed: int, rep
     oofs, tests = [], []
     for name in models:
         t0 = time.time()
-        oof, test_pred = cv_predict(name, X, y, X_test, folds, seed)
+        oof = np.zeros(len(X))
+        test_pred = np.zeros(len(X_test))
+        for s in range(seeds):
+            o, t = cv_predict(name, X, y, X_test, folds, seed + 1000 * s)
+            oof += o / seeds
+            test_pred += t / seeds
         scores[name] = accuracy_score(y, oof > 0.5)
         oofs.append(oof)
         tests.append(test_pred)
@@ -65,7 +70,7 @@ def run(data_dir: Path, out: Path, models: list[str], folds: int, seed: int, rep
     submission.to_csv(out, index=False)
     print(f"wrote {out} ({len(submission)} rows, {submission[TARGET].mean():.3f} transported)")
 
-    result = {"models": models, "folds": folds, "seed": seed, "cv_accuracy": scores}
+    result = {"models": models, "folds": folds, "seed": seed, "seeds": seeds, "cv_accuracy": scores}
     if report:
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(json.dumps(result, indent=2))
@@ -80,8 +85,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--folds", type=int, default=5)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--report", type=Path, default=Path("submissions/cv_report.json"))
+    p.add_argument("--seeds", type=int, default=1, help="average over this many CV seeds")
     a = p.parse_args(argv)
-    run(a.data_dir, a.out, a.models, a.folds, a.seed, a.report)
+    run(a.data_dir, a.out, a.models, a.folds, a.seed, a.report, a.seeds)
 
 
 if __name__ == "__main__":

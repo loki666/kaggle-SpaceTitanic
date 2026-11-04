@@ -22,28 +22,36 @@ CATEGORICAL = [
     "Side",
     "AgeGroup",
     "CabinRegion",
+    # spatial interactions: the event looks localised, so where a cabin sits matters
+    "DeckSide",
+    "DeckSideBand",
+    "PlanetDeck",
+    # behavioural proxy for where the passenger was: pod, cabin, spa/VR, venues
+    "LocationProxy",
 ]
 NUMERIC = [
     "Age",
     "CabinNum",
     "GroupSize",
-    "IsAlone",
     "FamilySize",
     "TotalSpend",
-    "LogTotalSpend",
     "NoSpending",
     "LuxurySpend",
     "BasicSpend",
+    "LogVenueOverLuxury",
     "SpendCount",
     "GroupSpendMean",
     "GroupCryoRate",
     "GroupNoSpendRate",
     "CabinMates",
-    "AgeMissing",
+    "CabinSpendMean",
+    "NeighbourSpendMean",
     "CabinMissing",
     "NameMissing",
     "SpendMissingCount",
-] + SPEND_COLS + [f"Log{c}" for c in SPEND_COLS]
+] + SPEND_COLS
+
+NEIGHBOUR_RADIUS = 20  # cabins either side, on the same deck and side
 
 
 def _split_ids(df: pd.DataFrame) -> pd.DataFrame:
@@ -133,15 +141,46 @@ def _impute(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _neighbour_mean(df: pd.DataFrame, col: str, radius: int) -> np.ndarray:
+    """Mean of ``col`` over passengers on the same deck/side whose cabin number
+    is within ``radius`` of the passenger's own (self included)."""
+    out = np.full(len(df), np.nan)
+    for _, g in df.groupby(["Deck", "Side"]):
+        order = np.argsort(g["CabinNum"].to_numpy())
+        num = g["CabinNum"].to_numpy()[order]
+        val = g[col].to_numpy(dtype=float)[order]
+        idx = g.index.to_numpy()[order]
+        csum = np.concatenate([[0.0], np.cumsum(val)])
+        lo = np.searchsorted(num, num - radius)
+        hi = np.searchsorted(num, num + radius, side="right")
+        out[idx] = (csum[hi] - csum[lo]) / (hi - lo)
+    return out
+
+
+def _location_proxy(df: pd.DataFrame) -> pd.Series:
+    """Where the passenger most likely was, inferred from cryosleep and from
+    which services their spending went to."""
+    total = df["TotalSpend"].replace(0, np.nan)
+    cabin = df["RoomService"] / total
+    spa_vr = (df["Spa"] + df["VRDeck"]) / total
+    venue = (df["FoodCourt"] + df["ShoppingMall"]) / total
+    loc = pd.Series("mixed", index=df.index)
+    loc[venue > 0.5] = "venue"
+    loc[spa_vr > 0.5] = "spa_vr"
+    loc[cabin > 0.5] = "cabin"
+    loc[df["TotalSpend"] == 0] = "nospend"
+    loc[df["CryoSleep"].astype(bool)] = "pod"
+    return loc
+
+
 def _derive(df: pd.DataFrame) -> pd.DataFrame:
     df["TotalSpend"] = df[SPEND_COLS].sum(axis=1)
-    df["LogTotalSpend"] = np.log1p(df["TotalSpend"])
     df["NoSpending"] = (df["TotalSpend"] == 0).astype(int)
     df["LuxurySpend"] = df[["RoomService", "Spa", "VRDeck"]].sum(axis=1)
     df["BasicSpend"] = df[["FoodCourt", "ShoppingMall"]].sum(axis=1)
+    df["LogVenueOverLuxury"] = np.log1p(df["BasicSpend"]) - np.log1p(df["LuxurySpend"])
     df["SpendCount"] = (df[SPEND_COLS] > 0).sum(axis=1)
-    for c in SPEND_COLS:
-        df[f"Log{c}"] = np.log1p(df[c])
+    df["LocationProxy"] = _location_proxy(df)
 
     df["AgeGroup"] = pd.cut(
         df["Age"],
@@ -159,7 +198,14 @@ def _derive(df: pd.DataFrame) -> pd.DataFrame:
     df["GroupSpendMean"] = df.groupby("Group")["TotalSpend"].transform("mean")
     df["GroupCryoRate"] = df.groupby("Group")["CryoSleep"].transform("mean")
     df["GroupNoSpendRate"] = df.groupby("Group")["NoSpending"].transform("mean")
-    df["CabinMates"] = df.groupby(["Deck", "CabinNum", "Side"])["PassengerId"].transform("count")
+    cabin_key = ["Deck", "CabinNum", "Side"]
+    df["CabinMates"] = df.groupby(cabin_key)["PassengerId"].transform("count")
+    df["CabinSpendMean"] = df.groupby(cabin_key)["TotalSpend"].transform("mean")
+    df["NeighbourSpendMean"] = _neighbour_mean(df, "TotalSpend", NEIGHBOUR_RADIUS)
+
+    df["DeckSide"] = df["Deck"] + "_" + df["Side"]
+    df["DeckSideBand"] = df["DeckSide"] + "_" + (df["CabinNum"] // 200).astype(int).astype(str)
+    df["PlanetDeck"] = df["HomePlanet"] + "_" + df["Deck"]
     return df
 
 

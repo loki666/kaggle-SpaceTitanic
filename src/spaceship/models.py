@@ -69,7 +69,7 @@ def make_catboost(seed: int) -> CatBoostWrapper:
     return CatBoostWrapper(
         iterations=1000,
         learning_rate=0.03,
-        depth=6,
+        depth=8,
         l2_leaf_reg=3.0,
         random_seed=seed,
         verbose=0,

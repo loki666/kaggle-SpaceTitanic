@@ -39,7 +39,15 @@ together so group statistics see the whole manifest:
 - Spending: total, log total, luxury (RoomService/Spa/VRDeck) vs basic
   (FoodCourt/ShoppingMall), count of non-zero categories, no-spend flag.
 - Group aggregates: mean spend, cryosleep rate, no-spend rate.
-- Missing-value indicators for age, cabin, name and spending.
+- Spatial interactions, on the hypothesis that the event was localised:
+  deck x side, deck x side x 200-cabin band, home planet x deck, mean spend
+  of the cabin and of neighbouring cabins (same deck/side, +/-20 numbers).
+- Behavioural proxy for where the passenger was when it happened: a
+  location category (pod / cabin / spa-VR / venue / mixed / no spend)
+  inferred from cryosleep and which services the spending went to, plus
+  the log ratio of venue spend (food court, mall) to luxury spend
+  (room service, spa, VR deck).
+- Missing-value indicators for cabin, name and spending.
 
 **Imputation** uses the structure of the data rather than global medians:
 cryosleepers spend nothing (and spenders are awake); groups share a home
@@ -50,6 +58,24 @@ Earth-only; age is filled by home planet and cryosleep status.
 categoricals) and a one-hot logistic regression. Each is trained with
 stratified K-fold; test predictions are averaged over folds, then the
 models' probabilities are averaged and thresholded at 0.5.
+
+## Results
+
+5-fold stratified CV accuracy (out-of-fold, seed 42) and Kaggle public score.
+
+| version | features                         | lgbm   | xgb    | catboost | logreg | blend  | public LB |
+|---------|----------------------------------|--------|--------|----------|--------|--------|-----------|
+| v1      | base                             | 0.8109 | 0.8121 | 0.8148   | 0.7971 | 0.8113 | 0.80266   |
+| v3      | + spatial + behaviour            | 0.8171 | 0.8176 | 0.8179   | 0.8061 | 0.8193 | 0.80547   |
+| v4      | v3, averaged over 3 CV seeds     | 0.8193 | 0.8159 | 0.8199   | 0.8058 | 0.8190 | see below |
+
+Notes from the experiments (`--seeds 5`, LightGBM proxy):
+
+- A leak-free "transported rate of training-fold neighbours within k cabins"
+  feature adds nothing beyond cabin number itself, so the localisation is
+  coarse (deck / side / band) rather than cabin-by-cabin.
+- Hyperparameters move CV within about +/-0.003; CatBoost depth 8 was best.
+- Blending beats the best single model by a hair; threshold 0.5 is optimal.
 
 ## Tests
 
