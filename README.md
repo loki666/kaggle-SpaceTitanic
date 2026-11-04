@@ -42,8 +42,9 @@ together so group statistics see the whole manifest:
   (FoodCourt/ShoppingMall), count of non-zero categories, no-spend flag.
 - Group aggregates: mean spend, cryosleep rate, no-spend rate.
 - Spatial interactions, on the hypothesis that the event was localised:
-  deck x side, deck x side x 200-cabin band, home planet x deck, mean spend
-  of the cabin and of neighbouring cabins (same deck/side, +/-20 numbers).
+  deck x side, deck x side x 400-cabin band, home planet x deck, mean spend
+  of the cabin and of neighbouring cabins (same deck/side, +/-5 numbers).
+  Band width and radius are parameters of `build_features`.
 - Behavioural proxy for where the passenger was when it happened: a
   location category (pod / cabin / spa-VR / venue / mixed / no spend)
   inferred from cryosleep and which services the spending went to, plus
@@ -81,6 +82,8 @@ Two optional extras, both evaluated so that the reported CV stays honest:
 | v3      | + spatial + behaviour            | 0.8171 | 0.8176 | 0.8179   | 0.8061 | 0.8193 | 0.80547   |
 | v4      | v3, averaged over 3 CV seeds     | 0.8193 | 0.8159 | 0.8199   | 0.8058 | 0.8190 | 0.80523   |
 | v5      | v3 + pseudo-label 0.9 + stack    | 0.8184 | 0.8162 | 0.8158   | 0.8047 | 0.8195 | 0.80570   |
+| v6      | v3, neighbour radius 5, band 400 | 0.8215 | 0.8207 | 0.8165   | 0.8046 | 0.8226 | 0.80547   |
+| v7      | v6, averaged over 3 CV seeds     | 0.8207 | 0.8207 | 0.8215   | 0.8036 | 0.8214 | 0.80640   |
 
 Notes from the experiments (`--seeds 5`, LightGBM proxy):
 
@@ -93,6 +96,10 @@ Notes from the experiments (`--seeds 5`, LightGBM proxy):
   at thresholds 0.8 / 0.9 / 0.95 gives blends of 0.8186 / 0.8190 / 0.8190;
   with the stacker on top the best is 0.8195, two passengers better than the
   average and inside seed noise.
+- Spatial sweep (10 seeds, mean of LightGBM and XGBoost): neighbour radius
+  5 beats 20 by 0.0016 and the trend is monotone, so the useful neighbour
+  signal is very local. Band width is flat between 50 and 1000; 400 was
+  marginally best. Together: 0.8165 -> 0.8186 on the proxy.
 - An MLP (scikit-learn stand-in for a Keras net) scores 0.803-0.804 alone and
   adds at most 0.0006 to the blend.
 

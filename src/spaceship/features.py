@@ -51,7 +51,8 @@ NUMERIC = [
     "SpendMissingCount",
 ] + SPEND_COLS
 
-NEIGHBOUR_RADIUS = 20  # cabins either side, on the same deck and side
+NEIGHBOUR_RADIUS = 5  # cabins either side, on the same deck and side
+BAND_WIDTH = 400  # cabin numbers per deck/side band
 
 
 def _split_ids(df: pd.DataFrame) -> pd.DataFrame:
@@ -173,7 +174,7 @@ def _location_proxy(df: pd.DataFrame) -> pd.Series:
     return loc
 
 
-def _derive(df: pd.DataFrame) -> pd.DataFrame:
+def _derive(df: pd.DataFrame, radius: int = NEIGHBOUR_RADIUS, band: int = BAND_WIDTH) -> pd.DataFrame:
     df["TotalSpend"] = df[SPEND_COLS].sum(axis=1)
     df["NoSpending"] = (df["TotalSpend"] == 0).astype(int)
     df["LuxurySpend"] = df[["RoomService", "Spa", "VRDeck"]].sum(axis=1)
@@ -201,18 +202,25 @@ def _derive(df: pd.DataFrame) -> pd.DataFrame:
     cabin_key = ["Deck", "CabinNum", "Side"]
     df["CabinMates"] = df.groupby(cabin_key)["PassengerId"].transform("count")
     df["CabinSpendMean"] = df.groupby(cabin_key)["TotalSpend"].transform("mean")
-    df["NeighbourSpendMean"] = _neighbour_mean(df, "TotalSpend", NEIGHBOUR_RADIUS)
+    df["NeighbourSpendMean"] = _neighbour_mean(df, "TotalSpend", radius)
 
     df["DeckSide"] = df["Deck"] + "_" + df["Side"]
-    df["DeckSideBand"] = df["DeckSide"] + "_" + (df["CabinNum"] // 200).astype(int).astype(str)
+    df["DeckSideBand"] = df["DeckSide"] + "_" + (df["CabinNum"] // band).astype(int).astype(str)
     df["PlanetDeck"] = df["HomePlanet"] + "_" + df["Deck"]
     return df
 
 
-def build_features(train: pd.DataFrame, test: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def build_features(
+    train: pd.DataFrame,
+    test: pd.DataFrame,
+    radius: int = NEIGHBOUR_RADIUS,
+    band: int = BAND_WIDTH,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Return (X_train_with_target, X_test) feature frames.
 
     Both frames keep ``PassengerId``; the train frame keeps ``Transported`` as int.
+    ``radius`` is the neighbouring-cabin window and ``band`` the cabin-band
+    width used by the spatial features.
     """
     train = train.copy()
     test = test.copy()
@@ -226,7 +234,7 @@ def build_features(train: pd.DataFrame, test: pd.DataFrame) -> tuple[pd.DataFram
     df = _split_cabin(df)
     df = _split_name(df)
     df = _impute(df)
-    df = _derive(df)
+    df = _derive(df, radius=radius, band=band)
 
     for c in ["CryoSleep", "VIP"]:
         df[c] = df[c].astype(int)
